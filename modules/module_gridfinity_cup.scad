@@ -1270,39 +1270,71 @@ module basic_cavity(num_x, num_y, num_z,
           floorHeight=floorht);
 
     if (cupBase_settings[iCupBase_EfficientFloor] != "off") {
-      magnetPosition = calculateAttachmentPositions(magnet_diameter, cupBase_settings[iCupBase_ScrewSize][iCylinderDimension_Diameter]);
-      magnetCoverHeight = max(
-        cupBase_settings[iCupBase_MagnetSize][iCylinderDimension_Height], 
+    // ... (variable calculations remain the same) ...
+    magnetPosition = calculateAttachmentPositions(magnet_diameter, cupBase_settings[iCupBase_ScrewSize][iCylinderDimension_Diameter]);
+    magnetCoverHeight = max(
+        cupBase_settings[iCupBase_MagnetSize][iCylinderDimension_Height],
         cupBase_settings[iCupBase_ScrewSize][iCylinderDimension_Height]);
-      hasCornerAttachments = magnet_diameter > 0 || screw_depth > 0;
-      efficientFloorGridHeight = max(magnetCoverHeight,gfBaseHeight())+floor_thickness;
-      if(env_help_enabled("trace")) echo("basic_cavity", efficient_floor=cupBase_settings[iCupBase_EfficientFloor], efficientFloorGridHeight=efficientFloorGridHeight,  floor_thickness=floor_thickness);
-      difference(){
+    hasCornerAttachments = magnet_diameter > 0 || screw_depth > 0;
+    efficientFloorGridHeight = max(magnetCoverHeight,gfBaseHeight())+floor_thickness; // << Height of the grid pattern removal area
+
+    if(env_help_enabled("trace")) echo("basic_cavity", efficient_floor=cupBase_settings[iCupBase_EfficientFloor], efficientFloorGridHeight=efficientFloorGridHeight,  floor_thickness=floor_thickness);
+
+    // This difference creates the shape that will be subtracted from the main bin cavity later.
+    // It starts with a solid block and removes the efficient floor pattern (minus attachment areas).
+    difference() { // Outer difference
+        // 1. Positive Shape: A block representing the total volume affected by efficient floor.
         tz(-fudgeFactor)
-          cube([num_x*env_pitch().x, num_y*env_pitch().y, efficientFloorGridHeight]);
-        
-        difference(){
-          efficient_floor_grid(
-            num_x, num_y,
-            floorStyle = cupBase_settings[iCupBase_EfficientFloor],
-            half_pitch=half_pitch,
-            flat_base=flat_base,
-            floor_thickness=floor_thickness,
-            efficientFloorGridHeight=efficientFloorGridHeight,
-            margins=q);
-           
-           //Screw and magnet covers required for efficient floor
-           if(hasCornerAttachments)
-             gridcopycorners(num_x, num_y, magnetPosition, box_corner_attachments_only)
-                EfficientFloorAttachmentCaps(
-                  grid_copy_corner_index = $gcci,
-                  floor_thickness = floor_thickness,
-                  magnet_size = cupBase_settings[iCupBase_MagnetSize],
-                  screw_size = cupBase_settings[iCupBase_ScrewSize],
-                  wall_thickness = magnet_easy_release == MagnetEasyRelease_inner ? wall_thickness*2 : wall_thickness );
-          }
-        }
-      }
+            cube([num_x*env_pitch().x, num_y*env_pitch().y, efficientFloorGridHeight]);
+
+        // 2. Negative Shape: The efficient floor grid pattern, but with attachment areas punched out first.
+        difference() { // Inner difference
+            // 2a. Positive Shape: The raw efficient floor grid pattern.
+            efficient_floor_grid(
+                num_x, num_y,
+                floorStyle = cupBase_settings[iCupBase_EfficientFloor],
+                half_pitch=half_pitch,
+                flat_base=flat_base,
+                floor_thickness=floor_thickness,
+                efficientFloorGridHeight=efficientFloorGridHeight, // Passed here
+                margins=q);
+
+            // 2b. Negative Shape: Union of all attachment areas to protect.
+            // These areas are removed *from the grid pattern* before the grid pattern
+            // is removed from the outer cube.
+            union() { // Union of all attachment areas to subtract from the grid pattern
+                // Corner Caps (Unchanged from original)
+                if (hasCornerAttachments) {
+                    gridcopycorners(num_x, num_y, magnetPosition, box_corner_attachments_only) {
+                         EfficientFloorAttachmentCaps(
+                            grid_copy_corner_index = $gcci,
+                            floor_thickness = floor_thickness,
+                            magnet_size = cupBase_settings[iCupBase_MagnetSize],
+                            screw_size = cupBase_settings[iCupBase_ScrewSize],
+                            wall_thickness = magnet_easy_release == MagnetEasyRelease_inner ? wall_thickness*2 : wall_thickness
+                        );
+                    }
+                }
+
+                // Center Platforms/Covers (Uses gridcopy)
+                // Assumes center magnets should have covers if enabled
+                if (cupBase_settings[iCupBase_CenterMagnetSize][iCylinderDimension_Diameter] > 0) {
+                    // Loop over every cell in the grid
+                    gridcopy(ceil(num_x), ceil(num_y)) {
+                        // Call the per-cell module (defined in Step 1)
+                        EfficientFloorCenterAttachmentCap_PerCell(
+                            floor_thickness = floor_thickness,
+                            magnet_size = cupBase_settings[iCupBase_CenterMagnetSize],
+                            wall_thickness = wall_thickness // Use appropriate wall thickness variable
+                        );
+                    }
+                }
+                // End Center Platforms/Covers
+
+            } // End of union()
+        } // End of inner difference
+    } // End of outer difference
+} // End of if (cupBase_settings[iCupBase_EfficientFloor] != "off")
     }  // difference removals from main body.
 
     if(divider_wall_removable_settings[iDividerRemovable_Enabled])

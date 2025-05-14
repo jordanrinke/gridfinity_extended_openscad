@@ -93,6 +93,37 @@ module EfficientFloorAttachmentCaps(
       }
     }
 }
+
+module EfficientFloorCenterAttachmentCap_PerCell(
+    floor_thickness,
+    magnet_size,
+    wall_thickness
+) {
+    if (magnet_size[iCylinderDimension_Diameter] > 0 && magnet_size[iCylinderDimension_Height] > 0) {
+        cell_center_x = env_pitch().x / 2;
+        cell_center_y = env_pitch().y / 2;
+        platform_diameter = magnet_size[iCylinderDimension_Diameter] + 2 * (wall_thickness);
+        if (wall_thickness < 1.2) {
+            platform_diameter = magnet_size[iCylinderDimension_Diameter] + 2 * (wall_thickness * 2);
+        }
+        platform_height = magnet_size[iCylinderDimension_Height];
+        fudgeFactor = 0.01;
+        cylinder_h = platform_height + fudgeFactor;
+        cylinder_r = platform_diameter / 2;
+        top_round_radius = wall_thickness; // Adjust if needed
+        bottom_round_radius = 0;
+
+        translate([cell_center_x, cell_center_y, floor_thickness - fudgeFactor]) {
+            roundedCylinder(
+                h = cylinder_h, r = cylinder_r,
+                roundedr1 = bottom_round_radius, roundedr2 = top_round_radius,
+                $fa=1, $fs=0.4
+            );
+        }
+    }
+}
+
+
 //Creates the efficient floor pad that will be removed from the floor
 module EfficientFloor(
   num_x=1, 
